@@ -8,11 +8,23 @@ from time import sleep
 
 # Token Addresses
 SAFEMOON_ADDRESS = "0x8076c74c5e3f5852037f31ff0093eeb8c8add8d3"
+KISHU_INU_ADDRESS = "0xa2b4c0af19cc16a6cfacce81f192b024d625817d"
+SHIBA_INU_ADDRESS = "0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce"
+
+known_contracts = {
+    SAFEMOON_ADDRESS: {"name": "Safemoon", "is_bsc": True},
+    KISHU_INU_ADDRESS: {"name": "Kishu Inu", "is_bsc": False},
+    SHIBA_INU_ADDRESS: {"name": "Shiba Inu", "is_bsc": False},
+}
 
 # API urls
 BSCSCAN_API_ROOT = "https://api.bscscan.com/api"
-TRANSACTIONS_URL = f"{BSCSCAN_API_ROOT}?module=account&action=tokentx"
-BALANCE_URL = f"{BSCSCAN_API_ROOT}?module=account&action=tokenbalance"
+ETHERSCAN_API_ROOT = "https://api.etherscan.io/api"
+
+TRANSACTIONS_URL = f"?module=account&action=tokentx"
+BALANCE_URL = f"?module=account&action=tokenbalance"
+TOKENINFO_URL = f"{BSCSCAN_API_ROOT}?module=token&action=tokeninfo"
+
 
 parser = argparse.ArgumentParser(
     description="Calculate reflections given to a specific token address for the given contract"
@@ -21,11 +33,14 @@ parser.add_argument(
     "-c", "--contract", type=str, help="Contract address", required=True
 )
 parser.add_argument("-a", "--address", type=str, help="Wallet address", required=True)
+parser.add_argument("-e", "--etherscan", type=bool, nargs='?', const=True,
+                    help="Use etherscan instead of bsc", default=False)
 
 locale.setlocale(locale.LC_NUMERIC, "en_us")
 
 decimal = 0
 
+api_root = None
 
 def fetch_data(url):
     resp = requests.get(url)
@@ -35,11 +50,20 @@ def fetch_data(url):
     else:
         return None
 
+def get_token_name(contract_address: str) -> str:
+    url = f"{TOKENINFO_URL}&contractaddress={contract_address}"
+    result = fetch_data(url)
+    if result:
+        return result['tokenName']
+    else:
+        print("Cannot get token name")
+        exit(3)
+
 def get_date(timestamp: str) -> str:
     return datetime.fromtimestamp(int(timestamp))
 
 def get_total(contract_addr, wallet_addr):
-    url = f"{BALANCE_URL}&contractaddress={contract_addr}&address={wallet_addr}"
+    url = f"{api_root}{BALANCE_URL}&contractaddress={contract_addr}&address={wallet_addr}"
     result = fetch_data(url)
     if result:
         return float(result) / pow(10, decimal)
@@ -48,7 +72,7 @@ def get_total(contract_addr, wallet_addr):
 
 
 def get_transactions(contract_addr, wallet_addr):
-    url = f"{TRANSACTIONS_URL}&address={wallet_addr}"
+    url = f"{api_root}{TRANSACTIONS_URL}&address={wallet_addr}"
     resp_json = fetch_data(url)
     result = ([], [])
     global decimal
@@ -59,9 +83,13 @@ def get_transactions(contract_addr, wallet_addr):
             "value" in record
             and "tokenDecimal" in record
             and "contractAddress" in record
-            and contract_addr == record["contractAddress"]
         ):
             float_value = float(record["value"]) / (pow(10, decimal))
+
+            if contract_addr != record["contractAddress"]:
+                # print(f"Transaction for {float_value} of contract {record['contractAddress']}, skipping")
+                continue
+
             if record['to'] == wallet_addr:
                 print(f"Value of {float_value} goes to this wallet on {get_date(record['timeStamp'])} ")
                 result[0].append(float_value)
@@ -92,11 +120,40 @@ def start():
     args = parser.parse_args()
     wallet_address = args.address.lower()
     contract_address = args.contract
+
+    global api_root
+
     if contract_address.lower() == "safemoon":
         contract_address = SAFEMOON_ADDRESS
 
+    if contract_address.lower().startswith('kishu'):
+        contract_address = KISHU_INU_ADDRESS
+
+    if contract_address.lower().startswith('shib'):
+        contract_address = SHIBA_INU_ADDRESS
+
+    use_etherscan = args.etherscan
+    token_name = None
+
+    if contract_address in known_contracts:
+        use_etherscan = not known_contracts[contract_address]["is_bsc"]
+        token_name = known_contracts[contract_address]["name"]
+
+    if use_etherscan:
+        print("Using ERC-20 network")
+        api_root = ETHERSCAN_API_ROOT
+    else:
+        print("Using BSC network")
+        api_root = BSCSCAN_API_ROOT
+
+
     print(f"Checking transactions for wallet {wallet_address}")
-    print(f"Checking transactions for contract {contract_address}")
+
+    if token_name:
+        print(f"Checking transactions for contract {contract_address} (name: {token_name})")
+    else:
+        print(f"Checking transactions for contract {contract_address}")
+
     transactions = get_transactions(contract_address, wallet_address)
     print("Waiting 5 seconds for rate limit\n")
     sleep(5)
