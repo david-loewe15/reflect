@@ -10,11 +10,13 @@ from time import sleep
 SAFEMOON_ADDRESS = "0x8076c74c5e3f5852037f31ff0093eeb8c8add8d3"
 KISHU_INU_ADDRESS = "0xa2b4c0af19cc16a6cfacce81f192b024d625817d"
 SHIBA_INU_ADDRESS = "0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce"
+PANCAKESWAP_CAKE_ADDRESS = "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82"
 
 known_contracts = {
     SAFEMOON_ADDRESS: {"name": "Safemoon", "is_bsc": True},
     KISHU_INU_ADDRESS: {"name": "Kishu Inu", "is_bsc": False},
     SHIBA_INU_ADDRESS: {"name": "Shiba Inu", "is_bsc": False},
+    PANCAKESWAP_CAKE_ADDRESS: {"name": "Pancakeswap CAKE", "is_bsc": True}
 }
 
 # API urls
@@ -131,6 +133,9 @@ def start():
 
     if contract_address.lower().startswith('shib'):
         contract_address = SHIBA_INU_ADDRESS
+
+    if contract_address.lower().startswith('cake'):
+        contract_address = PANCAKESWAP_CAKE_ADDRESS
 
     use_etherscan = args.etherscan
     token_name = None
